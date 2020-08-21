@@ -46,6 +46,8 @@ After that you can call it's methods to load data or to place orders:
 handler.start_kline_socket(lambda x: print(x), candle_type="1m", pair_name="XBTUSD")
 ```
 
+All the methods are described in AbstractExchangeHandler and later would be in a separate documentation.
+
 ## TODO
 
 * Add Binance implementation
