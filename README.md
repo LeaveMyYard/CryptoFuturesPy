@@ -50,9 +50,9 @@ All the methods are described in AbstractExchangeHandler and later would be in a
 
 ## TODO
 
-* Add Binance implementation
-* Add a documentation
-* Make websocket threads stoppable
+- [ ] Add Binance implementation
+- [ ] Add a documentation
+- [ ] Make websocket threads stoppable
 
 
 ## Licence
