@@ -12,6 +12,8 @@ One day, I was tried to be messing with different interfaces of Binance, Bitmex 
 
 So, there exists only a Bitmex implementation now, but Binance Futures are coming.
 
+All code is written on Python 3.7 with typing specifications. 
+
 ## Installation
 
 You can easily install it using 
@@ -28,10 +30,27 @@ from crypto_futures_py import BitmexExchangeHandler
 
 The documentation is [available here](http://day8.github.io/re-frame/). -->
 
+## Usage
+
+Create an object of your wanted exchange and provide your keys for this exchange there.
+
+```python
+from crypto_futures_py import BitmexExchangeHandler
+
+handler = BitmexExchangeHandler("publickey", "privatekey")
+```
+
+After that you can call it's methods to load data or to place orders:
+
+```python
+handler.start_kline_socket(lambda x: print(x), candle_type="1m", pair_name="XBTUSD")
+```
+
 ## TODO
 
 * Add Binance implementation
 * Add a documentation
+* Make websocket threads stoppable
 
 
 ## Licence
