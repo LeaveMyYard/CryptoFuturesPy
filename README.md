@@ -16,11 +16,13 @@ So, there exists only a Bitmex implementation now, but Binance Futures are comin
 
 You can easily install it using 
 
-```pip install crypto-futures-py``` 
+`pip install crypto-futures-py`
 
 and then access it in your Python code like that:
 
-```from crypto_futures_py import BitmexExchangeHandler```
+```python
+from crypto_futures_py import BitmexExchangeHandler
+```
 
 <!-- ## Documentation 
 
