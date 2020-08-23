@@ -60,7 +60,11 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
 
     @staticmethod
     def get_pairs_list() -> typing.List[str]:
-        return ["XBTUSD"]
+        return (
+            bitmex.bitmex(test=False)
+            .Instrument.Instrument_getActiveIntervals()
+            .result()[0]["symbols"]
+        )
 
     def start_kline_socket(
         self,
