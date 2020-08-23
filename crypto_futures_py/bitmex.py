@@ -113,8 +113,8 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
     ) -> None:
         def __on_message(ws, msg):
             msg = json.loads(msg)
-            if "data" in msg and "lastPrice" in msg["data"][0]:
-                price = msg["data"][0]["lastPrice"]
+            if "data" in msg and "lastPriceProtected" in msg["data"][0]:
+                price = msg["data"][0]["lastPriceProtected"]
                 on_update(AbstractExchangeHandler.PriceCallback(price=price))
 
         def __on_error(ws, error):
