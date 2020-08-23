@@ -21,6 +21,10 @@ class AbstractExchangeHandler(metaclass=abc.ABCMeta):
         self._public_key = public_key
         self._private_key = private_key
 
+        self._user_update_callbacks: typing.List[
+            typing.Callable[[AbstractExchangeHandler.UserUpdate], None]
+        ] = []
+
     @staticmethod
     @abc.abstractmethod
     def get_pairs_list() -> typing.List[str]:
@@ -62,6 +66,7 @@ class AbstractExchangeHandler(metaclass=abc.ABCMeta):
         orderID: str
         client_orderID: str
         status: str
+        symbol: str
         price: float
         average_price: float
         fee: float
@@ -89,7 +94,7 @@ class AbstractExchangeHandler(metaclass=abc.ABCMeta):
     def start_user_update_socket(
         self, on_update: typing.Callable[[AbstractExchangeHandler.UserUpdate], None]
     ) -> None:
-        ...
+        self._user_update_callbacks.append(on_update)
 
     def start_kline_socket_threaded(
         self,
@@ -183,7 +188,7 @@ class AbstractExchangeHandler(metaclass=abc.ABCMeta):
         ...
 
     @abc.abstractmethod
-    async def cancel_orders(self, orders: typing.List[int]) -> None:
+    async def cancel_orders(self, orders: typing.List[str]) -> None:
         ...
 
     @staticmethod

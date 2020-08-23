@@ -56,6 +56,7 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
             test=False, api_key=self._public_key, api_secret=self._private_key
         )
         self.logger = logging.Logger(__name__)
+        self._order_table: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
 
     @staticmethod
     def get_pairs_list() -> typing.List[str]:
@@ -129,10 +130,82 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
         )
         ws.run_forever()
 
+    def _user_update_pending(
+        self,
+        client_orderID: str,
+        price: typing.Optional[float],
+        volume: float,
+        symbol: str,
+        side: str,
+    ) -> None:
+        volume_side = 1 if side == "Buy" else -1
+        event = self.OrderUpdate(
+            orderID="",
+            client_orderID=client_orderID,
+            status="PENDING",
+            symbol=symbol,
+            price=price if price is not None else float("nan"),
+            average_price=float("nan"),
+            fee=0,
+            fee_asset="XBT",
+            volume=volume * volume_side,
+            volume_realized=0,
+            time=datetime.now(),
+            message={},
+        )
+        for callback in self._user_update_callbacks:
+            callback(event)
+
+    def _user_update_pending_cancel(
+        self,
+        order_id: typing.Optional[str] = None,
+        client_orderID: typing.Optional[str] = None,
+    ) -> None:
+        if order_id is not None:
+            order_data = self._order_table[order_id]
+        elif client_orderID is not None:
+            order_data = [
+                data
+                for data in self._order_table.values()
+                if data["clOrdID"] == client_orderID
+            ][0]
+        else:
+            raise ValueError(
+                "Either order_id of client_orderID should be sent, but both are None"
+            )
+
+        volume_side = 1 if order_data["side"] == "Buy" else -1
+
+        dic = {
+            "orderID": order_data["orderID"],
+            "client_orderID": order_data["clOrdID"],
+            "symbol": order_data["symbol"],
+            "status": "PENDING_CANCEL",
+            "price": order_data["price"],
+            "average_price": order_data["avgPx"]
+            if "avgPx" in order_data and order_data["avgPx"] is not None
+            else None,
+            "fee": 0,
+            "fee_asset": "XBT",
+            "volume_realized": order_data["cumQty"] * volume_side
+            if "cumQty" in order_data and order_data["cumQty"] is not None
+            else 0,
+            "volume": order_data["orderQty"] * volume_side,
+            "time": datetime.strptime(
+                order_data["timestamp"][:-1] + "000", "%Y-%m-%dT%H:%M:%S.%f",
+            ),
+            "message": order_data,
+        }
+
+        for callback in self._user_update_callbacks:
+            callback(self.OrderUpdate(**dic))
+
     def start_user_update_socket(
         self, on_update: typing.Callable[[AbstractExchangeHandler.UserUpdate], None]
     ) -> None:
         self.logger.info("Starting user update socket")
+
+        super().start_user_update_socket(on_update)
 
         # Switch these comments to use testnet instead.
         # BITMEX_URL = "wss://testnet.bitmex.com"
@@ -165,19 +238,17 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
         request = {"op": "subscribe", "args": ["order", "position", "margin"]}
         ws.send(json.dumps(request))
 
-        _order_table: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
-
         cst: typing.DefaultDict[str, float] = collections.defaultdict(
             lambda: 1, {"XBTUSD": 10 ** -8}
         )
 
         def __process_order_update(msg):
             for data in msg["data"]:
-                if data["orderID"] not in _order_table:
-                    _order_table[data["orderID"]] = {}
+                if data["orderID"] not in self._order_table:
+                    self._order_table[data["orderID"]] = {}
 
                 for key, value in data.items():
-                    _order_table[data["orderID"]][key] = value
+                    self._order_table[data["orderID"]][key] = value
 
             if "action" in msg and (
                 msg["action"] == "insert" or msg["action"] == "update"
@@ -185,9 +256,11 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
                 for data in msg["data"]:
                     if "ordStatus" not in data:
                         continue
+                    order_data = self._order_table[data["orderID"]]
                     fee_payed = 0
+
                     if data["ordStatus"] == "Filled":
-                        pair_name = "XBTUSD"
+                        pair_name = order_data["symbol"]
                         corresponding_trades = self._client.Execution.Execution_getTradeHistory(
                             symbol=pair_name,
                             filter=json.dumps({"orderID": data["orderID"]}),
@@ -200,14 +273,12 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
                                 for trade in corresponding_trades
                             ]
                         )
-
-                    order_data = _order_table[data["orderID"]]
-
                     volume_side = 1 if order_data["side"] == "Buy" else -1
 
                     dic = {
                         "orderID": order_data["orderID"],
                         "client_orderID": order_data["clOrdID"],
+                        "symbol": order_data["symbol"],
                         "status": order_data["ordStatus"].upper(),
                         "price": order_data["price"],
                         "average_price": order_data["avgPx"]
@@ -383,6 +454,15 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
 
         return df
 
+    def _round_price(
+        self, symbol: str, price: typing.Optional[float]
+    ) -> typing.Optional[float]:
+        if price is None:
+            return None
+
+        # TODO
+        return int(price * 2) / 2
+
     async def create_order(
         self,
         symbol: str,
@@ -397,7 +477,7 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
                     symbol=symbol,
                     side=side,
                     orderQty=volume,
-                    price=price,
+                    price=self._round_price(symbol, price),
                     ordType="Limit",
                     execInst="ParticipateDoNotInitiate",
                 ).result()[0]
@@ -406,13 +486,16 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
                     symbol=symbol, side=side, orderQty=volume, ordType="Market",
                 ).result()[0]
         else:
+            self._user_update_pending(
+                client_ordID, self._round_price(symbol, price), volume, symbol, side
+            )
             if price is not None:
                 result = self._client.Order.Order_new(
                     clOrdID=client_ordID,
                     symbol=symbol,
                     side=side,
                     orderQty=volume,
-                    price=price,
+                    price=self._round_price(symbol, price),
                     ordType="Limit",
                     execInst="ParticipateDoNotInitiate",
                 ).result()[0]
@@ -434,12 +517,12 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
         symbol: str,
         data: typing.List[typing.Tuple[str, float, float, typing.Optional[str]]],
     ) -> typing.List[AbstractExchangeHandler.NewOrderData]:
-        orders = [
+        orders: typing.List[typing.Dict[str, typing.Union[str, float]]] = [
             dict(
                 symbol=symbol,
                 side=order_data[0],
                 orderQty=order_data[2],
-                price=order_data[1],
+                price=typing.cast(float, self._round_price(symbol, order_data[1])),
                 ordType="Limit",
                 execInst="ParticipateDoNotInitiate",
             )
@@ -449,12 +532,20 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
                 symbol=symbol,
                 side=order_data[0],
                 orderQty=order_data[2],
-                price=order_data[1],
+                price=typing.cast(float, self._round_price(symbol, order_data[1])),
                 ordType="Limit",
                 execInst="ParticipateDoNotInitiate",
             )
             for order_data in data
         ]
+        for order in orders:
+            self._user_update_pending(
+                str(order["clOrdID"]),
+                float(order["price"]),
+                float(order["orderQty"]),
+                str(order["symbol"]),
+                str(order["side"]),
+            )
         results = self._client.Order.Order_newBulk(orders=json.dumps(orders))
         results = results.result()[0]
 
@@ -471,13 +562,18 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
         client_orderID: typing.Optional[str] = None,
     ) -> None:
         if order_id is not None:
+            self._user_update_pending_cancel(order_id=order_id)
             self._client.Order.Order_cancel(orderID=order_id).result()
         elif client_orderID is not None:
+            self._user_update_pending_cancel(client_orderID=client_orderID)
             self._client.Order.Order_cancel(clOrdID=client_orderID).result()
         else:
             raise ValueError(
                 "Either order_id of client_orderID should be sent, but both are None"
             )
 
-    async def cancel_orders(self, orders: typing.List[int]) -> None:
+    async def cancel_orders(self, orders: typing.List[str]) -> None:
+        for order_id in orders:
+            self._user_update_pending_cancel(order_id=order_id)
+
         self._client.Order.Order_cancel(orderID=json.dumps(orders)).result()
