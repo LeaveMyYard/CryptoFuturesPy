@@ -391,16 +391,17 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
     async def load_historical_data(
         self, symbol: str, candle_type: str, amount: int
     ) -> pd.DataFrame:
-        """load_historical_data load historical candles from the exchange
+        """load_historical_data loads historical klines from exchange
 
         Args:
-            type (str): candle type, aka 1m, 5m, 1h or 1d
-            amount (int): the amount of candles, that should be loaded
+            symbol (str): pair name
+            candle_type (str): exchange specific type of candles ("1m" for example)
+            amount (int): number of klines to load
 
         Returns:
-            pd.DataFrame: the pandas table, containing 6 columns:
-                Date, Open, High, Low, Close and Volume
+            pd.DataFrame: dataframe with columns: Date, Open, High, Low, Close, Volume
         """
+
         parse_interval = lambda interval: (
             1
             if interval == "1m"
