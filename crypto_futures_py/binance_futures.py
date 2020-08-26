@@ -5,49 +5,95 @@
 
 import pandas as pd
 import typing
+import json
 import logging
+import pandas as pd
 
 from . import futurespy as fp
-
 from . import AbstractExchangeHandler
 
 
 class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
-    
-    
     def __init__(self, public_key, private_key):
         super().__init__(public_key, private_key)
         self._client = fp.Client(
             testnet=False, api_key=self._public_key, sec_key=self._private_key
         )
-        
+
         self._orderId_dict = {}
         self._clOrderId_dict = {}
-        
+
         self.logger = logging.Logger(__name__)
         self._order_table: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
-        
-        
+
     def start_kline_socket(
         self,
         on_update: typing.Callable[[AbstractExchangeHandler.KlineCallback], None],
         candle_type: str,
         pair_name: str,
     ) -> None:
-        ...
+        def _on_update(message):
+            candle = message["k"]
+            if candle["x"]:
+                on_update(
+                    self.KlineCallback(
+                        time=pd.to_datetime(candle["t"], unit="ms"),
+                        open=float(candle["o"]),
+                        high=float(candle["h"]),
+                        low=float(candle["l"]),
+                        close=float(candle["c"]),
+                        volume=float(candle["v"]),
+                    )
+                )
+
+        ws = fp.WebsocketMarket(
+            symbol=pair_name,
+            on_message=lambda _, message: _on_update(message),
+            interval=candle_type,
+        )
+        ws.candle_socket()
 
     def start_price_socket(
         self,
         on_update: typing.Callable[[AbstractExchangeHandler.PriceCallback], None],
         pair_name: str,
     ) -> None:
-        ...     
-        
+        def _on_update(message):
+            on_update(self.PriceCallback(float(message["p"])))
+
+        ws = fp.WebsocketMarket(
+            symbol=pair_name, on_message=lambda _, message: _on_update(message),
+        )
+        ws.mark_price_socket()
+
     def start_user_update_socket(
         self, on_update: typing.Callable[[AbstractExchangeHandler.UserUpdate], None]
     ) -> None:
         super().start_user_update_socket(on_update)
-        
+
+        def _on_update_recieved(message: typing.Dict[str, typing.Any]) -> None:
+            print(message)
+            # if message["e"] == "ACCOUNT_UPDATE":
+            #     print(message)
+            # elif message["e"] == "ORDER_TRADE_UPDATE":
+            #     print(
+            #         {
+            #             "id": message["o"]["c"],
+            #             "status": message["o"]["X"],
+            #             "price": float(message["o"]["ap"]),
+            #             "fee": float(message["o"]["n"]) if "n" in message["o"] else 0,
+            #             "fee_asset": message["o"]["N"] if "N" in message["o"] else None,
+            #             "volume": float(message["o"]["z"]),
+            #             "time": pd.to_datetime(message["o"]["T"], unit="ms"),
+            #             "message": message
+            #         }
+            #     )
+
+        self._client.user_update_socket(
+            on_message=lambda ws, message: _on_update_recieved(json.loads(message)),
+            on_close=lambda x: self.start_user_update_socket(on_update),
+        )
+
     def _round_price(
         self, symbol: str, price: typing.Optional[float]
     ) -> typing.Optional[float]:
@@ -56,7 +102,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
 
         # TODO
         return int(price * 2) / 2
-    
+
     def _user_update_pending(
         self,
         client_orderID: str,
@@ -65,15 +111,15 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         symbol: str,
         side: str,
     ) -> None:
-        ... # TODO
-        
+        ...  # TODO
+
     def _user_update_pending_cancel(
         self,
         order_id: typing.Optional[str] = None,
         client_orderID: typing.Optional[str] = None,
     ) -> None:
-        ... # TODO
-    
+        ...  # TODO
+
     @staticmethod
     def get_pairs_list() -> typing.List[str]:
         """get_pairs_list Returns all available pairs on exchange
@@ -81,8 +127,8 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         Returns:
             typing.List[str]: The list of symbol strings
         """
-        
-        return [pair['symbol'] for pair in fp.MarketData().exchange_info()['symbols']]
+
+        return [pair["symbol"] for pair in fp.MarketData().exchange_info()["symbols"]]
 
     async def load_historical_data(
         self, symbol: str, candle_type: str, amount: int
@@ -98,12 +144,10 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
             pd.DataFrame: Dataframe with columns: Date, Open, High, Low, Close, Volume
         """
         marketDataLoader = fp.MarketData(
-            symbol = symbol,
-            interval = candle_type,
-            testnet = False
+            symbol=symbol, interval=candle_type, testnet=False
         )
-        data = marketDataLoader.load_historical_candles(count = amount).iloc[:-1]
-        data = data[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
+        data = marketDataLoader.load_historical_candles(count=amount).iloc[:-1]
+        data = data[["Date", "Open", "High", "Low", "Close", "Volume"]]
 
         return data
 
@@ -132,42 +176,51 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
             if price is not None:
                 result = self._client.new_order(
                     symbol=symbol,
-                    side=side,
-                    orderType="Limit",
+                    side=side.upper(),
+                    orderType="LIMIT",
                     quantity=volume,
                     price=self._round_price(symbol, price),
-                    # timeInForce='GTX' # POST ONLY
+                    timeInForce="GTX",  # POST ONLY
                 )
             else:
                 result = self._client.new_order(
-                    symbol=symbol, side=side, quantity=volume, orderType="Market",
+                    symbol=symbol,
+                    side=side.upper(),
+                    quantity=volume,
+                    orderType="MARKET",
                 )
         else:
             self._user_update_pending(
-                client_ordID, self._round_price(symbol, price), volume, symbol, side
+                client_ordID,
+                self._round_price(symbol, price),
+                volume,
+                symbol,
+                side.upper(),
             )
             if price is not None:
                 result = self._client.new_order(
-                    clOrdID=client_ordID,
+                    newClientOrderId=client_ordID,
                     symbol=symbol,
-                    side=side,
-                    orderType="Limit",
+                    side=side.upper(),
+                    orderType="LIMIT",
                     quantity=volume,
                     price=self._round_price(symbol, price),
-                    # timeInForce='GTX' # POST ONLY
+                    timeInForce="GTX",  # POST ONLY
                 )
             else:
                 result = self._client.new_order(
-                    clOrdID=client_ordID,
+                    newClientOrderId=client_ordID,
                     symbol=symbol,
                     quantity=volume,
-                    side=side,
-                    orderType="Market",
+                    side=side.upper(),
+                    orderType="MARKET",
                 )
 
-        return AbstractExchangeHandler.NewOrderData(
-            orderID=result["orderID"], client_orderID=result["clOrdID"]
-        )
+        print(result)
+
+        # return AbstractExchangeHandler.NewOrderData(
+        #     orderID=result["orderID"], client_orderID=result["clOrdID"]
+        # )
 
     async def create_orders(
         self,
@@ -188,21 +241,21 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         """
         orders: typing.List[typing.Dict[str, typing.Union[str, float]]] = [
             {
-                "symbol" : symbol,
-                "side" : order_data[0],
-                "type" : "Limit",
-                "quantity" : order_data[2],
-                "price" : typing.cast(float, self._round_price(symbol, order_data[1])),
+                "symbol": symbol,
+                "side": order_data[0],
+                "type": "Limit",
+                "quantity": order_data[2],
+                "price": typing.cast(float, self._round_price(symbol, order_data[1])),
                 # "timeInForce" : "GTX" # POST ONLY
             }
             if len(order_data) == 3 or order_data[3] is None
             else {
-                "clOrdID" : order_data[3],
-                "symbol" : symbol,
-                "side" : order_data[0],
-                "type" : "Limit",
-                "quantity" : order_data[2],
-                "price" : typing.cast(float, self._round_price(symbol, order_data[1])),
+                "clOrdID": order_data[3],
+                "symbol": symbol,
+                "side": order_data[0],
+                "type": "Limit",
+                "quantity": order_data[2],
+                "price": typing.cast(float, self._round_price(symbol, order_data[1])),
                 # "timeInForce" : "GTX" # POST ONLY
             }
             for order_data in data
@@ -215,7 +268,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                 symbol=str(order["symbol"]),
                 side=str(order["side"]),
             )
-        
+
         results = []
         orders_list = self._split_list(orders=orders, size=5)
         for tmp_orders_list in orders_list:
@@ -242,11 +295,17 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
             order_id (typing.Optional[str], optional): Server's order id. Defaults to None.
             client_orderID (typing.Optional[str], optional): Client's order id. Defaults to None.
         """
-        
+
         if order_id is not None and order_id in self._orderId_dict.keys():
-            self._client.cancel_order(symbol=self._orderId_dict[order_id], orderId=order_id)
-        elif client_orderID is not None and client_orderID in self._clOrderId_dict.keys():
-            self._client.cancel_order(symbol=self._clOrderId_dict[client_orderID], clientID=client_orderID)
+            self._client.cancel_order(
+                symbol=self._orderId_dict[order_id], orderId=order_id
+            )
+        elif (
+            client_orderID is not None and client_orderID in self._clOrderId_dict.keys()
+        ):
+            self._client.cancel_order(
+                symbol=self._clOrderId_dict[client_orderID], clientID=client_orderID
+            )
         else:
             raise ValueError(
                 "Either order_id of client_orderID should be sent, but both are None"
@@ -258,12 +317,12 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
 
     @staticmethod
     def swap_dict(orders):
-        symbols_dict = {} 
-        for key, value in orders.items(): 
-           if value in symbols_dict: 
-               symbols_dict[value].append(key) 
-           else: 
-               symbols_dict[value]=[key]
+        symbols_dict = {}
+        for key, value in orders.items():
+            if value in symbols_dict:
+                symbols_dict[value].append(key)
+            else:
+                symbols_dict[value] = [key]
 
     async def cancel_orders(self, orders: typing.List[str]) -> None:
         """cancel_orders Cancels a lot of orders in one requets
@@ -276,9 +335,9 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
 
         for order_id in orders:
             self._user_update_pending_cancel(order_id=order_id)
-            
+
         symbols_dict = self.swap_dict(self._orderId_dict)
-        
+
         to_cancel_dict = {}
         for key in symbols_dict.keys():
             for order_id in orders:
@@ -287,12 +346,14 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                         to_cancel_dict[key].append(order_id)
                     else:
                         to_cancel_dict[key] = [order_id]
-        
+
         results = []
         for symbol in to_cancel_dict.keys():
             tmp_list = self._split_list(to_cancel_dict[symbol], 10)
             for lst in tmp_list:
-                result = self._client.cancel_multiple_orders(symbol=symbol, orderIdList=lst)
+                result = self._client.cancel_multiple_orders(
+                    symbol=symbol, orderIdList=lst
+                )
                 results.append(result)
-            
+
         return results

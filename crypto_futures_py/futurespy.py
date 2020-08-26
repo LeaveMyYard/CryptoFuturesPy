@@ -336,10 +336,6 @@ class WebsocketMarket:
 
         return parced_func
 
-    def open_socket(self, way):
-        thread = threading.Thread(target=lambda: self._open_socket(way))
-        thread.start()
-
     def _open_socket(self, way):
         websocket.enableTrace(False)
 
@@ -353,32 +349,32 @@ class WebsocketMarket:
         self.ws.run_forever()
 
     def aggregate_trade_socket(self):
-        self.open_socket(f"{self.wss_way}{self.symbol}@aggTrade")
+        self._open_socket(f"{self.wss_way}{self.symbol}@aggTrade")
 
     def mark_price_socket(self):
-        self.open_socket(f"{self.wss_way}{self.symbol}@markPrice")
+        self._open_socket(f"{self.wss_way}{self.symbol}@markPrice")
 
     def candle_socket(self):
-        self.open_socket(f"{self.wss_way}{self.symbol}@kline_{self.interval}")
+        self._open_socket(f"{self.wss_way}{self.symbol}@kline_{self.interval}")
 
     def individual_symbol_mini_ticker(self):
-        self.open_socket(f"{self.wss_way}{self.symbol}@miniTicker")
+        self._open_socket(f"{self.wss_way}{self.symbol}@miniTicker")
 
     def individual_symbol_ticker(self):
-        self.open_socket(f"{self.wss_way}{self.symbol}@ticker")
+        self._open_socket(f"{self.wss_way}{self.symbol}@ticker")
 
     def all_book_ticker(self):
-        self.open_socket(f"{self.wss_way}!bookTicker")
+        self._open_socket(f"{self.wss_way}!bookTicker")
 
     def partial_book_depth_socket(self, levels: int = 20):
         """
         To change count of top bids and asks -> levels = 5
         (5, 10 or 20 values are valid)
         """
-        self.open_socket(f"{self.wss_way}{self.symbol}@depth{levels}@{self.speed}")
+        self._open_socket(f"{self.wss_way}{self.symbol}@depth{levels}@{self.speed}")
 
     def diff_book_depth_socket(self):
-        self.open_socket(f"{self.wss_way}{self.symbol}@depth@{self.speed}")
+        self._open_socket(f"{self.wss_way}{self.symbol}@depth@{self.speed}")
 
 
 #%%
@@ -584,7 +580,7 @@ class Client:
         querystring = urllib.parse.urlencode(querystring)
 
         return self._post_request(req, querystring)
-    
+
     def place_multiple_orders(self, orders_list):
         """
         POST
@@ -597,8 +593,8 @@ class Client:
                 "timestamp": self.timestamp(),
             }
         )
-        querystring = querystring.replace('%27', '%22')
-        
+        querystring = querystring.replace("%27", "%22")
+
         return self._post_request(req, querystring)
 
     def query_order(self, symbol: str, orderId, clientID=False):
@@ -843,7 +839,7 @@ class Client:
     ):
 
         listen_key = self.get_listen_key()
-        self.open_socket(f"{self.wss_way}{listen_key}", on_message, on_error, on_close)
+        self._open_socket(f"{self.wss_way}{listen_key}", on_message, on_error, on_close)
 
     def stop_user_update_socket(self):
         self.close_stream()
