@@ -7,7 +7,7 @@ import pandas as pd
 import typing
 import logging
 
-import futurespy as fp
+from . import futurespy as fp
 
 from . import AbstractExchangeHandler
 
@@ -18,7 +18,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
     def __init__(self, public_key, private_key):
         super().__init__(public_key, private_key)
         self._client = fp.Client(
-            test=False, api_key=self._public_key, api_secret=self._private_key
+            testnet=False, api_key=self._public_key, sec_key=self._private_key
         )
         
         self._orderId_dict = {}
@@ -27,6 +27,26 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         self.logger = logging.Logger(__name__)
         self._order_table: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
         
+        
+    def start_kline_socket(
+        self,
+        on_update: typing.Callable[[AbstractExchangeHandler.KlineCallback], None],
+        candle_type: str,
+        pair_name: str,
+    ) -> None:
+        ...
+
+    def start_price_socket(
+        self,
+        on_update: typing.Callable[[AbstractExchangeHandler.PriceCallback], None],
+        pair_name: str,
+    ) -> None:
+        ...     
+        
+    def start_user_update_socket(
+        self, on_update: typing.Callable[[AbstractExchangeHandler.UserUpdate], None]
+    ) -> None:
+        super().start_user_update_socket(on_update)
         
     def _round_price(
         self, symbol: str, price: typing.Optional[float]
