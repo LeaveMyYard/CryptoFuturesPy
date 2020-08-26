@@ -117,11 +117,11 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                     quantity=volume,
                     price=self._round_price(symbol, price),
                     # timeInForce='GTX' # POST ONLY
-                ).result()[0]
+                )
             else:
                 result = self._client.new_order(
                     symbol=symbol, side=side, quantity=volume, orderType="Market",
-                ).result()[0]
+                )
         else:
             self._user_update_pending(
                 client_ordID, self._round_price(symbol, price), volume, symbol, side
@@ -135,7 +135,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                     quantity=volume,
                     price=self._round_price(symbol, price),
                     # timeInForce='GTX' # POST ONLY
-                ).result()[0]
+                )
             else:
                 result = self._client.new_order(
                     clOrdID=client_ordID,
@@ -143,7 +143,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                     quantity=volume,
                     side=side,
                     orderType="Market",
-                ).result()[0]
+                )
 
         return AbstractExchangeHandler.NewOrderData(
             orderID=result["orderID"], client_orderID=result["clOrdID"]
@@ -166,9 +166,47 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         Returns:
             typing.List[AbstractExchangeHandler.NewOrderData]: List of results
         """
+        orders: typing.List[typing.Dict[str, typing.Union[str, float]]] = [
+            {
+                "symbol" : symbol,
+                "side" : order_data[0],
+                "type" : "Limit",
+                "quantity" : order_data[2],
+                "price" : typing.cast(float, self._round_price(symbol, order_data[1])),
+                # "timeInForce" : "GTX" # POST ONLY
+            }
+            if len(order_data) == 3 or order_data[3] is None
+            else {
+                "clOrdID" : order_data[3],
+                "symbol" : symbol,
+                "side" : order_data[0],
+                "type" : "Limit",
+                "quantity" : order_data[2],
+                "price" : typing.cast(float, self._round_price(symbol, order_data[1])),
+                # "timeInForce" : "GTX" # POST ONLY
+            }
+            for order_data in data
+        ]
+        for order in orders:
+            self._user_update_pending(
+                client_orderID=str(order["clOrdID"]),
+                price=float(order["price"]),
+                volume=float(order["quantity"]),
+                symbol=str(order["symbol"]),
+                side=str(order["side"]),
+            )
         
-        
-        ...  # TODO
+        results = []
+        orders_list = self._split_list(orders=orders, size=5)
+        for tmp_orders_list in orders_list:
+            results.append(self._client.place_multiple_orders(tmp_orders_list))
+
+        return [
+            AbstractExchangeHandler.NewOrderData(
+                orderID=result["orderID"], client_orderID=result["clOrdID"]
+            )
+            for result in results
+        ]
 
     async def cancel_order(
         self,
@@ -195,8 +233,17 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
             )
 
     @staticmethod
-    def _split_list(orders, size):
-        return [orders[i : i + size] for i in range(0, len(orders), size)]
+    def _split_list(lst, size):
+        return [lst[i : i + size] for i in range(0, len(lst), size)]
+
+    @staticmethod
+    def swap_dict(orders):
+        symbols_dict = {} 
+        for key, value in orders.items(): 
+           if value in symbols_dict: 
+               symbols_dict[value].append(key) 
+           else: 
+               symbols_dict[value]=[key]
 
     async def cancel_orders(self, orders: typing.List[str]) -> None:
         """cancel_orders Cancels a lot of orders in one requets
@@ -206,13 +253,26 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         Args:
             orders (typing.List[str]): The list of server's order_ids.
         """
-        
+
         for order_id in orders:
             self._user_update_pending_cancel(order_id=order_id)
+            
+        symbols_dict = self.swap_dict(self._orderId_dict)
         
-        # TODO
+        to_cancel_dict = {}
+        for key in symbols_dict.keys():
+            for order_id in orders:
+                if order_id in symbols_dict[key]:
+                    if key in to_cancel_dict:
+                        to_cancel_dict[key].append(order_id)
+                    else:
+                        to_cancel_dict[key] = [order_id]
         
-        tmp_list = self._split_list(orders=orders, size=10)
-        for id_list in tmp_list:
-            self._client.cancel_multiple_orders(id_list)
-
+        results = []
+        for symbol in to_cancel_dict.keys():
+            tmp_list = self._split_list(to_cancel_dict[symbol], 10)
+            for lst in tmp_list:
+                result = self._client.cancel_multiple_orders(symbol=symbol, orderIdList=lst)
+                results.append(result)
+            
+        return results

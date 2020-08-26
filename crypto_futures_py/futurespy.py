@@ -584,6 +584,22 @@ class Client:
         querystring = urllib.parse.urlencode(querystring)
 
         return self._post_request(req, querystring)
+    
+    def place_multiple_orders(self, orders_list):
+        """
+        POST
+        """
+        req = "batchOrders?"
+        querystring = urllib.parse.urlencode(
+            {
+                "batchOrders": orders_list,
+                "recvWindow": self.recvWindow,
+                "timestamp": self.timestamp(),
+            }
+        )
+        querystring = querystring.replace('%27', '%22')
+        
+        return self._post_request(req, querystring)
 
     def query_order(self, symbol: str, orderId, clientID=False):
         """
