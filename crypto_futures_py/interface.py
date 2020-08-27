@@ -290,15 +290,23 @@ class AbstractExchangeHandler(metaclass=abc.ABCMeta):
         for callback in self._user_update_callbacks:
             callback(event)
 
+    def _user_update_failed(self, client_orderID: str) -> None:
+        order_data = self._order_table_clid[client_orderID]
+        order_data["status"] = "FAILED"
+        order_data["time"] = datetime.now()
+
+        for callback in self._user_update_callbacks:
+            callback(self.OrderUpdate(**order_data))
+
     def _user_update_pending_cancel(
         self,
         order_id: typing.Optional[str] = None,
         client_orderID: typing.Optional[str] = None,
     ) -> None:
         if order_id is not None:
-            order_data = self._order_table_id[order_id].copy()
+            order_data = self._order_table_id[order_id]
         elif client_orderID is not None:
-            order_data = self._order_table_clid[client_orderID].copy()
+            order_data = self._order_table_clid[client_orderID]
         else:
             raise ValueError(
                 "Either order_id of client_orderID should be sent, but both are None"

@@ -252,9 +252,18 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                     orderType="MARKET",
                 )
 
-        return AbstractExchangeHandler.NewOrderData(
-            orderID=result["orderId"], client_orderID=result["clientOrderId"]
-        )
+        try:
+            return AbstractExchangeHandler.NewOrderData(
+                orderID=result["orderId"], client_orderID=result["clientOrderId"]
+            )
+        except:
+            if client_ordID is not None:
+                self._user_update_failed(client_ordID)
+                AbstractExchangeHandler.NewOrderData(
+                    orderID="", client_orderID=client_ordID
+                )
+            else:
+                raise
 
     async def create_orders(
         self,
@@ -329,6 +338,10 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
             order_id (typing.Optional[str], optional): Server's order id. Defaults to None.
             client_orderID (typing.Optional[str], optional): Client's order id. Defaults to None.
         """
+
+        self._user_update_pending_cancel(
+            order_id=order_id, client_orderID=client_orderID
+        )
 
         if order_id is not None and order_id in self._order_table_id:
             self._client.cancel_order(
