@@ -128,19 +128,21 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         Returns:
             AbstractExchangeHandler.NewOrderData: Data of the resulting order.
         """
+        print(symbol, side, price, volume, client_ordID)
+
         if client_ordID is None:
             if price is not None:
                 result = self._client.new_order(
                     symbol=symbol,
-                    side=side,
-                    orderType="Limit",
+                    side=side.upper(),
+                    orderType="LIMIT",
                     quantity=volume,
                     price=self._round_price(symbol, price),
                     # timeInForce='GTX' # POST ONLY
                 )
             else:
                 result = self._client.new_order(
-                    symbol=symbol, side=side, quantity=volume, orderType="Market",
+                    symbol=symbol, side=side.upper(), quantity=volume, orderType="MARKET",
                 )
         else:
             self._user_update_pending(
@@ -148,25 +150,27 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
             )
             if price is not None:
                 result = self._client.new_order(
-                    clOrdID=client_ordID,
+                    newClientOrderId=client_ordID,
                     symbol=symbol,
-                    side=side,
-                    orderType="Limit",
+                    side=side.upper(),
+                    orderType="LIMIT",
                     quantity=volume,
                     price=self._round_price(symbol, price),
                     # timeInForce='GTX' # POST ONLY
                 )
             else:
                 result = self._client.new_order(
-                    clOrdID=client_ordID,
+                    newClientOrderId=client_ordID,
                     symbol=symbol,
                     quantity=volume,
-                    side=side,
-                    orderType="Market",
+                    side=side.upper(),
+                    orderType="MARKET",
                 )
-
+                
+        print(result)
+        
         return AbstractExchangeHandler.NewOrderData(
-            orderID=result["orderID"], client_orderID=result["clOrdID"]
+            orderID=result["orderId"], client_orderID=result["clientOrderId"]
         )
 
     async def create_orders(
@@ -189,8 +193,8 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         orders: typing.List[typing.Dict[str, typing.Union[str, float]]] = [
             {
                 "symbol" : symbol,
-                "side" : order_data[0],
-                "type" : "Limit",
+                "side" : order_data[0].upper(),
+                "type" : "LIMIT",
                 "quantity" : order_data[2],
                 "price" : typing.cast(float, self._round_price(symbol, order_data[1])),
                 # "timeInForce" : "GTX" # POST ONLY
@@ -199,8 +203,8 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
             else {
                 "clOrdID" : order_data[3],
                 "symbol" : symbol,
-                "side" : order_data[0],
-                "type" : "Limit",
+                "side" : order_data[0].upper(),
+                "type" : "LIMIT",
                 "quantity" : order_data[2],
                 "price" : typing.cast(float, self._round_price(symbol, order_data[1])),
                 # "timeInForce" : "GTX" # POST ONLY

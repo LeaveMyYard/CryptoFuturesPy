@@ -541,7 +541,7 @@ class Client:
         side: str,
         orderType: str,
         quantity: float,
-        timeInForce: float = None,
+        timeInForce: float = 'GTC',
         reduceOnly: bool = False,
         price: float = None,
         newClientOrderId: str = None,
@@ -582,7 +582,7 @@ class Client:
         querystring["recvWindow"] = self.recvWindow
 
         querystring = urllib.parse.urlencode(querystring)
-
+        
         return self._post_request(req, querystring)
     
     def place_multiple_orders(self, orders_list):
