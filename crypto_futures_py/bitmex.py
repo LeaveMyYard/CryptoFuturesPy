@@ -85,6 +85,7 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
                     "low": data["low"],
                     "close": data["close"],
                     "volume": data["volume"],
+                    "final": True,
                     "message": msg,
                 }
                 on_update(AbstractExchangeHandler.KlineCallback(**data))
@@ -343,7 +344,7 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
 
             on_update(
                 AbstractExchangeHandler.BalanceUpdate(
-                    balance=_margin_data["marginBalance"] * cst["XBTUSD"]
+                    balance=_margin_data["marginBalance"] * cst["XBTUSD"], symbol="XBT"
                 )
             )
 

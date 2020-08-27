@@ -43,6 +43,7 @@ class AbstractExchangeHandler(metaclass=abc.ABCMeta):
         low: float
         close: float
         volume: float
+        final: bool
         message: typing.Any
 
     @abc.abstractmethod
@@ -92,6 +93,7 @@ class AbstractExchangeHandler(metaclass=abc.ABCMeta):
     @dataclass
     class BalanceUpdate:
         balance: float
+        symbol: str
 
     UserUpdate = typing.Union[OrderUpdate, PositionUpdate, BalanceUpdate]
 

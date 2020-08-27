@@ -14,6 +14,8 @@ from . import AbstractExchangeHandler
 
 
 class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
+    exchange_information = fp.MarketData().exchange_info()
+
     def __init__(self, public_key, private_key):
         super().__init__(public_key, private_key)
         self._client = fp.Client(
@@ -26,8 +28,6 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         self.logger = logging.Logger(__name__)
         self._order_table: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
 
-        self.exchange_information = fp.MarketData().exchange_info()
-
     def start_kline_socket(
         self,
         on_update: typing.Callable[[AbstractExchangeHandler.KlineCallback], None],
@@ -36,17 +36,18 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
     ) -> None:
         def _on_update(message):
             candle = message["k"]
-            if candle["x"]:
-                on_update(
-                    self.KlineCallback(
-                        time=pd.to_datetime(candle["t"], unit="ms"),
-                        open=float(candle["o"]),
-                        high=float(candle["h"]),
-                        low=float(candle["l"]),
-                        close=float(candle["c"]),
-                        volume=float(candle["v"]),
-                    )
+            on_update(
+                self.KlineCallback(
+                    time=pd.to_datetime(candle["t"], unit="ms"),
+                    open=float(candle["o"]),
+                    high=float(candle["h"]),
+                    low=float(candle["l"]),
+                    close=float(candle["c"]),
+                    volume=float(candle["v"]),
+                    final=candle["x"],
+                    message=message,
                 )
+            )
 
         ws = fp.WebsocketMarket(
             symbol=pair_name,
@@ -74,22 +75,40 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         super().start_user_update_socket(on_update)
 
         def _on_update_recieved(message: typing.Dict[str, typing.Any]) -> None:
-            print(message)
-            # if message["e"] == "ACCOUNT_UPDATE":
-            #     print(message)
-            # elif message["e"] == "ORDER_TRADE_UPDATE":
-            #     print(
-            #         {
-            #             "id": message["o"]["c"],
-            #             "status": message["o"]["X"],
-            #             "price": float(message["o"]["ap"]),
-            #             "fee": float(message["o"]["n"]) if "n" in message["o"] else 0,
-            #             "fee_asset": message["o"]["N"] if "N" in message["o"] else None,
-            #             "volume": float(message["o"]["z"]),
-            #             "time": pd.to_datetime(message["o"]["T"], unit="ms"),
-            #             "message": message
-            #         }
-            #     )
+            if message["e"] == "ACCOUNT_UPDATE":
+                for balance in message["a"]["B"]:
+                    on_update(
+                        self.BalanceUpdate(balance=balance["wb"], symbol=balance["a"])
+                    )
+                for position in message["a"]["P"]:
+                    on_update(
+                        self.PositionUpdate(
+                            symbol=position["s"],
+                            size=position["pa"],
+                            value=position["pa"] * position["ep"],
+                            entry_price=position["ep"],
+                            liquidation_price=float("nan"),  # TODO
+                        )
+                    )
+
+            elif message["e"] == "ORDER_TRADE_UPDATE":
+                event = message["o"]
+                on_update(
+                    self.OrderUpdate(
+                        orderID=event["i"],
+                        client_orderID=event["c"],
+                        status=event["X"],
+                        symbol=event["S"],
+                        price=event["p"],
+                        average_price=event["ap"],
+                        fee=event["n"] if "n" in event else 0,
+                        fee_asset=event["N"] if "N" in event else "",
+                        volume=event["q"],
+                        volume_realized=event["z"],
+                        time=pd.to_datetime(event["T"], unit="ms"),
+                        message=message,
+                    )
+                )
 
         self._client.user_update_socket(
             on_message=lambda ws, message: _on_update_recieved(json.loads(message)),
@@ -99,7 +118,6 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
     def _round_price(
         self, symbol: str, price: typing.Optional[float]
     ) -> typing.Optional[float]:
-
         for d in self.exchange_information["symbols"]:
             if d["symbol"] == symbol:
                 price_precision = d["pricePrecision"]
@@ -109,10 +127,15 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
 
         return None if price is None else round(price, price_precision)
 
-    def _round_volume(
-        self, symbol: str, volume: typing.Optional[float]
-    ) -> typing.Optional[float]:
+    @typing.overload
+    def _round_volume(self, symbol: str, volume: None) -> None:
+        ...
 
+    @typing.overload
+    def _round_volume(self, symbol: str, volume: float) -> float:
+        ...
+
+    def __round_volume(self, symbol, volume):
         for d in self.exchange_information["symbols"]:
             if d["symbol"] == symbol:
                 quantity_precision = d["quantityPrecision"]
@@ -139,14 +162,18 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
     ) -> None:
         ...  # TODO
 
-    def get_pairs_list(self) -> typing.List[str]:
+    @staticmethod
+    def get_pairs_list() -> typing.List[str]:
         """get_pairs_list Returns all available pairs on exchange
 
         Returns:
             typing.List[str]: The list of symbol strings
         """
 
-        return [pair["symbol"] for pair in self.exchange_information["symbols"]]
+        return [
+            pair["symbol"]
+            for pair in BinanceFuturesExchangeHandler.exchange_information["symbols"]
+        ]
 
     async def load_historical_data(
         self, symbol: str, candle_type: str, amount: int
