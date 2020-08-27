@@ -56,7 +56,6 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
             test=False, api_key=self._public_key, api_secret=self._private_key
         )
         self.logger = logging.Logger(__name__)
-        self._order_table: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
 
     @staticmethod
     def get_pairs_list() -> typing.List[str]:
@@ -134,76 +133,6 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
             on_close=__on_close,
         )
         ws.run_forever()
-
-    def _user_update_pending(
-        self,
-        client_orderID: str,
-        price: typing.Optional[float],
-        volume: float,
-        symbol: str,
-        side: str,
-    ) -> None:
-        volume_side = 1 if side == "Buy" else -1
-        event = self.OrderUpdate(
-            orderID="",
-            client_orderID=client_orderID,
-            status="PENDING",
-            symbol=symbol,
-            price=price if price is not None else float("nan"),
-            average_price=float("nan"),
-            fee=0,
-            fee_asset="XBT",
-            volume=volume * volume_side,
-            volume_realized=0,
-            time=datetime.now(),
-            message={},
-        )
-        for callback in self._user_update_callbacks:
-            callback(event)
-
-    def _user_update_pending_cancel(
-        self,
-        order_id: typing.Optional[str] = None,
-        client_orderID: typing.Optional[str] = None,
-    ) -> None:
-        if order_id is not None:
-            order_data = self._order_table[order_id]
-        elif client_orderID is not None:
-            order_data = [
-                data
-                for data in self._order_table.values()
-                if data["clOrdID"] == client_orderID
-            ][0]
-        else:
-            raise ValueError(
-                "Either order_id of client_orderID should be sent, but both are None"
-            )
-
-        volume_side = 1 if order_data["side"] == "Buy" else -1
-
-        dic = {
-            "orderID": order_data["orderID"],
-            "client_orderID": order_data["clOrdID"],
-            "symbol": order_data["symbol"],
-            "status": "PENDING_CANCEL",
-            "price": order_data["price"],
-            "average_price": order_data["avgPx"]
-            if "avgPx" in order_data and order_data["avgPx"] is not None
-            else None,
-            "fee": 0,
-            "fee_asset": "XBT",
-            "volume_realized": order_data["cumQty"] * volume_side
-            if "cumQty" in order_data and order_data["cumQty"] is not None
-            else 0,
-            "volume": order_data["orderQty"] * volume_side,
-            "time": datetime.strptime(
-                order_data["timestamp"][:-1] + "000", "%Y-%m-%dT%H:%M:%S.%f",
-            ),
-            "message": order_data,
-        }
-
-        for callback in self._user_update_callbacks:
-            callback(self.OrderUpdate(**dic))
 
     def start_user_update_socket(
         self, on_update: typing.Callable[[AbstractExchangeHandler.UserUpdate], None]
@@ -305,6 +234,7 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
                     if dic["status"] == "PARTIALLYFILLED":
                         dic["status"] = "PARTIALLY_FILLED"
 
+                    self._register_order_data(order_data)
                     on_update(AbstractExchangeHandler.OrderUpdate(**dic))
 
         _position_table: typing.Dict[str, typing.Dict[str, typing.Any]] = {}

@@ -8,7 +8,7 @@ import requests
 import urllib
 import json
 
-
+import typing
 import hmac
 import hashlib
 
@@ -537,7 +537,7 @@ class Client:
         side: str,
         orderType: str,
         quantity: float,
-        timeInForce: float = "GTC",
+        timeInForce: str = "GTC",
         reduceOnly: bool = False,
         price: float = None,
         newClientOrderId: str = None,
@@ -615,7 +615,7 @@ class Client:
 
         return self._get_request(req, querystring)
 
-    def cancel_order(self, symbol: str, orderId, clientID=False):
+    def cancel_order(self, symbol: str, orderId: str, clientID: bool = False):
         """
         DELETE
         

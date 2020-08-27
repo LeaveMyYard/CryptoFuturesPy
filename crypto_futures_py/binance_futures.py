@@ -9,6 +9,8 @@ import json
 import logging
 import pandas as pd
 
+from datetime import datetime
+
 from . import futurespy as fp
 from . import AbstractExchangeHandler
 
@@ -26,7 +28,6 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         self._clOrderId_dict = {}
 
         self.logger = logging.Logger(__name__)
-        self._order_table: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
 
     def start_kline_socket(
         self,
@@ -93,22 +94,23 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
 
             elif message["e"] == "ORDER_TRADE_UPDATE":
                 event = message["o"]
-                on_update(
-                    self.OrderUpdate(
-                        orderID=event["i"],
-                        client_orderID=event["c"],
-                        status=event["X"],
-                        symbol=event["S"],
-                        price=event["p"],
-                        average_price=event["ap"],
-                        fee=event["n"] if "n" in event else 0,
-                        fee_asset=event["N"] if "N" in event else "",
-                        volume=event["q"],
-                        volume_realized=event["z"],
-                        time=pd.to_datetime(event["T"], unit="ms"),
-                        message=message,
-                    )
+                order_data = dict(
+                    orderID=event["i"],
+                    client_orderID=event["c"],
+                    status=event["X"],
+                    symbol=event["s"],
+                    price=event["p"],
+                    average_price=event["ap"],
+                    fee=event["n"] if "n" in event else 0,
+                    fee_asset=event["N"] if "N" in event else "",
+                    volume=event["q"],
+                    volume_realized=event["z"],
+                    time=pd.to_datetime(event["T"], unit="ms"),
+                    message=message,
                 )
+
+                self._register_order_data(order_data)
+                on_update(self.OrderUpdate(**order_data))
 
         self._client.user_update_socket(
             on_message=lambda ws, message: _on_update_recieved(json.loads(message)),
@@ -127,15 +129,9 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
 
         return None if price is None else round(price, price_precision)
 
-    @typing.overload
-    def _round_volume(self, symbol: str, volume: None) -> None:
-        ...
+    _T = typing.TypeVar("_T", float, None)
 
-    @typing.overload
-    def _round_volume(self, symbol: str, volume: float) -> float:
-        ...
-
-    def __round_volume(self, symbol, volume):
+    def _round_volume(self, symbol: str, volume: _T) -> _T:
         for d in self.exchange_information["symbols"]:
             if d["symbol"] == symbol:
                 quantity_precision = d["quantityPrecision"]
@@ -143,24 +139,18 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         else:
             raise ValueError(f"{symbol} is not in exchange info")
 
-        return None if volume is None else round(volume, quantity_precision)
+        if (
+            not isinstance(volume, float)
+            and not isinstance(volume, int)
+            and volume is not None
+        ):
+            raise ValueError
 
-    def _user_update_pending(
-        self,
-        client_orderID: str,
-        price: typing.Optional[float],
-        volume: float,
-        symbol: str,
-        side: str,
-    ) -> None:
-        ...  # TODO
-
-    def _user_update_pending_cancel(
-        self,
-        order_id: typing.Optional[str] = None,
-        client_orderID: typing.Optional[str] = None,
-    ) -> None:
-        ...  # TODO
+        return (
+            None
+            if volume is None
+            else round(typing.cast(float, volume), quantity_precision)
+        )
 
     @staticmethod
     def get_pairs_list() -> typing.List[str]:
@@ -340,15 +330,15 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
             client_orderID (typing.Optional[str], optional): Client's order id. Defaults to None.
         """
 
-        if order_id is not None and order_id in self._orderId_dict.keys():
+        if order_id is not None and order_id in self._order_table_id:
             self._client.cancel_order(
-                symbol=self._orderId_dict[order_id], orderId=order_id
+                symbol=self._order_table_id[order_id]["symbol"], orderId=order_id
             )
-        elif (
-            client_orderID is not None and client_orderID in self._clOrderId_dict.keys()
-        ):
+        elif client_orderID is not None and client_orderID in self._order_table_clid:
             self._client.cancel_order(
-                symbol=self._clOrderId_dict[client_orderID], clientID=client_orderID
+                symbol=self._order_table_clid[client_orderID]["symbol"],
+                orderId=client_orderID,
+                clientID=True,
             )
         else:
             raise ValueError(
@@ -358,15 +348,6 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
     @staticmethod
     def _split_list(lst, size):
         return [lst[i : i + size] for i in range(0, len(lst), size)]
-
-    @staticmethod
-    def swap_dict(orders):
-        symbols_dict = {}
-        for key, value in orders.items():
-            if value in symbols_dict:
-                symbols_dict[value].append(key)
-            else:
-                symbols_dict[value] = [key]
 
     async def cancel_orders(self, orders: typing.List[str]) -> None:
         """cancel_orders Cancels a lot of orders in one requets
@@ -380,16 +361,13 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         for order_id in orders:
             self._user_update_pending_cancel(order_id=order_id)
 
-        symbols_dict = self.swap_dict(self._orderId_dict)
+        to_cancel_dict: typing.Dict[str, typing.List[str]] = {}
 
-        to_cancel_dict = {}
-        for key in symbols_dict.keys():
-            for order_id in orders:
-                if order_id in symbols_dict[key]:
-                    if key in to_cancel_dict:
-                        to_cancel_dict[key].append(order_id)
-                    else:
-                        to_cancel_dict[key] = [order_id]
+        for order in orders:
+            order_symbol: str = self._order_table_id[order]["symbol"]
+            if order_symbol not in to_cancel_dict:
+                to_cancel_dict[order_symbol] = []
+            to_cancel_dict[order_symbol].append(order)
 
         results = []
         for symbol in to_cancel_dict.keys():
@@ -399,5 +377,3 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                     symbol=symbol, orderIdList=lst
                 )
                 results.append(result)
-
-        return results

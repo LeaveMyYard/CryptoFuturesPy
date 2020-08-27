@@ -25,6 +25,9 @@ class AbstractExchangeHandler(metaclass=abc.ABCMeta):
             typing.Callable[[AbstractExchangeHandler.UserUpdate], None]
         ] = []
 
+        self._order_table_id: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
+        self._order_table_clid: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
+
     @staticmethod
     @abc.abstractmethod
     def get_pairs_list() -> typing.List[str]:
@@ -256,3 +259,53 @@ class AbstractExchangeHandler(metaclass=abc.ABCMeta):
                 bytes(str(datetime.now()) + str(random.randint(0, 1000)), "utf-8")
             ).digest()
         ).decode("ascii")
+
+    def _register_order_data(self, order_data: typing.Dict[str, typing.Any],) -> None:
+        self._order_table_id[order_data["orderID"]] = order_data
+        self._order_table_clid[order_data["client_orderID"]] = order_data
+
+    def _user_update_pending(
+        self,
+        client_orderID: str,
+        price: typing.Optional[float],
+        volume: float,
+        symbol: str,
+        side: str,
+    ) -> None:
+        volume_side = 1 if side.lower() == "buy" else -1
+        event = self.OrderUpdate(
+            orderID="",
+            client_orderID=client_orderID,
+            status="PENDING",
+            symbol=symbol,
+            price=price if price is not None else float("nan"),
+            average_price=float("nan"),
+            fee=0,
+            fee_asset="XBT",
+            volume=volume * volume_side,
+            volume_realized=0,
+            time=datetime.now(),
+            message={},
+        )
+        for callback in self._user_update_callbacks:
+            callback(event)
+
+    def _user_update_pending_cancel(
+        self,
+        order_id: typing.Optional[str] = None,
+        client_orderID: typing.Optional[str] = None,
+    ) -> None:
+        if order_id is not None:
+            order_data = self._order_table_id[order_id].copy()
+        elif client_orderID is not None:
+            order_data = self._order_table_clid[client_orderID].copy()
+        else:
+            raise ValueError(
+                "Either order_id of client_orderID should be sent, but both are None"
+            )
+
+        order_data["status"] = "PENDING_CANCEL"
+        order_data["time"] = datetime.now()
+
+        for callback in self._user_update_callbacks:
+            callback(self.OrderUpdate(**order_data))
