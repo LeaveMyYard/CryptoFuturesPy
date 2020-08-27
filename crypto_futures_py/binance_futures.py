@@ -25,7 +25,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
 
         self.logger = logging.Logger(__name__)
         self._order_table: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
-        
+
         self.exchange_information = fp.MarketData().exchange_info()
 
     def start_kline_socket(
@@ -99,23 +99,27 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
     def _round_price(
         self, symbol: str, price: typing.Optional[float]
     ) -> typing.Optional[float]:
-        
-        for d in self.exchange_information['symbols']:
-            if d['symbol'] == symbol:
-                price_precision = d['symbol']['pricePrecision']
+
+        for d in self.exchange_information["symbols"]:
+            if d["symbol"] == symbol:
+                price_precision = d["pricePrecision"]
                 break
-        
+        else:
+            raise ValueError(f"{symbol} is not in exchange info")
+
         return None if price is None else round(price, price_precision)
-    
+
     def _round_volume(
         self, symbol: str, volume: typing.Optional[float]
     ) -> typing.Optional[float]:
-        
-        for d in self.exchange_information['symbols']:
-            if d['symbol'] == symbol:
-                quantity_precision = d['symbol']['quantityPrecision']
+
+        for d in self.exchange_information["symbols"]:
+            if d["symbol"] == symbol:
+                quantity_precision = d["quantityPrecision"]
                 break
-            
+        else:
+            raise ValueError(f"{symbol} is not in exchange info")
+
         return None if volume is None else round(volume, quantity_precision)
 
     def _user_update_pending(
@@ -186,7 +190,6 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         Returns:
             AbstractExchangeHandler.NewOrderData: Data of the resulting order.
         """
-        print(symbol, side, price, volume, client_ordID)
 
         if client_ordID is None:
             if price is not None:
