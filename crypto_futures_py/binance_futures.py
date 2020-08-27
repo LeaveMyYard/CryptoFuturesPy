@@ -25,6 +25,8 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
 
         self.logger = logging.Logger(__name__)
         self._order_table: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
+        
+        self.exchange_information = fp.MarketData().exchange_info()
 
     def start_kline_socket(
         self,
@@ -97,11 +99,24 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
     def _round_price(
         self, symbol: str, price: typing.Optional[float]
     ) -> typing.Optional[float]:
-        if price is None:
-            return None
-
-        # TODO
-        return int(price * 2) / 2
+        
+        for d in self.exchange_information['symbols']:
+            if d['symbol'] == symbol:
+                price_precision = d['symbol']['pricePrecision']
+                break
+        
+        return None if price is None else round(price, price_precision)
+    
+    def _round_volume(
+        self, symbol: str, volume: typing.Optional[float]
+    ) -> typing.Optional[float]:
+        
+        for d in self.exchange_information['symbols']:
+            if d['symbol'] == symbol:
+                quantity_precision = d['symbol']['quantityPrecision']
+                break
+            
+        return None if volume is None else round(volume, quantity_precision)
 
     def _user_update_pending(
         self,
@@ -120,15 +135,14 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
     ) -> None:
         ...  # TODO
 
-    @staticmethod
-    def get_pairs_list() -> typing.List[str]:
+    def get_pairs_list(self) -> typing.List[str]:
         """get_pairs_list Returns all available pairs on exchange
 
         Returns:
             typing.List[str]: The list of symbol strings
         """
 
-        return [pair["symbol"] for pair in fp.MarketData().exchange_info()["symbols"]]
+        return [pair["symbol"] for pair in self.exchange_information["symbols"]]
 
     async def load_historical_data(
         self, symbol: str, candle_type: str, amount: int
@@ -180,7 +194,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                     symbol=symbol,
                     side=side.upper(),
                     orderType="LIMIT",
-                    quantity=volume,
+                    quantity=self._round_volume(symbol, volume),
                     price=self._round_price(symbol, price),
                     timeInForce="GTX",  # POST ONLY
                 )
@@ -188,14 +202,14 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                 result = self._client.new_order(
                     symbol=symbol,
                     side=side.upper(),
-                    quantity=volume,
+                    quantity=self._round_volume(symbol, volume),
                     orderType="MARKET",
                 )
         else:
             self._user_update_pending(
                 client_ordID,
                 self._round_price(symbol, price),
-                volume,
+                self._round_volume(symbol, volume),
                 symbol,
                 side.upper(),
             )
@@ -205,7 +219,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                     symbol=symbol,
                     side=side.upper(),
                     orderType="LIMIT",
-                    quantity=volume,
+                    quantity=self._round_volume(symbol, volume),
                     price=self._round_price(symbol, price),
                     timeInForce="GTX",  # POST ONLY
                 )
@@ -213,7 +227,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                 result = self._client.new_order(
                     newClientOrderId=client_ordID,
                     symbol=symbol,
-                    quantity=volume,
+                    quantity=self._round_volume(symbol, volume),
                     side=side.upper(),
                     orderType="MARKET",
                 )
@@ -244,7 +258,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                 "symbol": symbol,
                 "side": order_data[0].upper(),
                 "type": "LIMIT",
-                "quantity": order_data[2],
+                "quantity": self._round_volume(symbol, order_data[2]),
                 "price": typing.cast(float, self._round_price(symbol, order_data[1])),
                 # "timeInForce" : "GTX" # POST ONLY
             }
@@ -254,7 +268,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                 "symbol": symbol,
                 "side": order_data[0].upper(),
                 "type": "LIMIT",
-                "quantity": order_data[2],
+                "quantity": self._round_volume(symbol, order_data[2]),
                 "price": typing.cast(float, self._round_price(symbol, order_data[1])),
                 # "timeInForce" : "GTX" # POST ONLY
             }
