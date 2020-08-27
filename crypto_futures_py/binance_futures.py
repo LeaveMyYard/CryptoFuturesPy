@@ -95,16 +95,16 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
             elif message["e"] == "ORDER_TRADE_UPDATE":
                 event = message["o"]
                 order_data = dict(
-                    orderID=event["i"],
-                    client_orderID=event["c"],
+                    orderID=str(event["i"]),
+                    client_orderID=str(event["c"]),
                     status=event["X"],
                     symbol=event["s"],
-                    price=event["p"],
-                    average_price=event["ap"],
-                    fee=event["n"] if "n" in event else 0,
+                    price=float(event["p"]),
+                    average_price=float(event["ap"]),
+                    fee=float(event["n"]) if "n" in event else 0,
                     fee_asset=event["N"] if "N" in event else "",
-                    volume=event["q"],
-                    volume_realized=event["z"],
+                    volume=float(event["q"]),
+                    volume_realized=float(event["z"]),
                     time=pd.to_datetime(event["T"], unit="ms"),
                     message=message,
                 )
@@ -259,7 +259,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         except:
             if client_ordID is not None:
                 self._user_update_failed(client_ordID)
-                AbstractExchangeHandler.NewOrderData(
+                return AbstractExchangeHandler.NewOrderData(
                     orderID="", client_orderID=client_ordID
                 )
             else:
