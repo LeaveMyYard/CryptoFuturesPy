@@ -30,13 +30,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
 
         self.logger = logging.Logger(__name__)
 
-    @dataclass
-    class SymbolData:
-        min_volume: float
-        max_volume: float
-        step_size: float
-
-    def get_symbols_data(self) -> typing.Dict[str, SymbolData]:
+    def get_symbols_data(self) -> typing.Dict[str, AbstractExchangeHandler.SymbolData]:
         symbols_dict = {}
         exchange_symbols_data = BinanceFuturesExchangeHandler.exchange_information[
             "symbols"
@@ -102,6 +96,37 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         for data in self._client.balance():
             on_update(self.BalanceUpdate(balance=data["balance"], symbol=data["asset"]))
 
+        for event in self._client.current_open_orders():
+            order_data = dict(
+                orderID=str(event["orderId"]),
+                client_orderID=str(event["clientOrderId"]),
+                status=event["status"],
+                symbol=event["symbol"],
+                price=float(event["price"]),
+                average_price=float(event["avgPrice"]),
+                fee=float(event["n"]) if "n" in event else 0,
+                fee_asset=event["N"] if "N" in event else "",
+                volume=float(event["origQty"]),
+                volume_realized=float(event["executedQty"]),
+                time=pd.to_datetime(event["time"], unit="ms"),
+                message=event,
+            )
+
+            self._register_order_data(order_data)
+            on_update(self.OrderUpdate(**order_data))
+
+        for position in self._client.position_info():
+            on_update(
+                self.PositionUpdate(
+                    symbol=position["symbol"],
+                    size=float(position["positionAmt"]),
+                    value=float(position["positionAmt"])
+                    * float(position["entryPrice"]),
+                    entry_price=float(position["entryPrice"]),
+                    liquidation_price=float(position["liquidationPrice"]),  # TODO
+                )
+            )
+
         def _on_update_recieved(message: typing.Dict[str, typing.Any]) -> None:
             if message["e"] == "ACCOUNT_UPDATE":
                 for balance in message["a"]["B"]:
@@ -112,9 +137,9 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                     on_update(
                         self.PositionUpdate(
                             symbol=position["s"],
-                            size=position["pa"],
-                            value=position["pa"] * position["ep"],
-                            entry_price=position["ep"],
+                            size=float(position["pa"]),
+                            value=float(position["pa"]) * float(position["ep"]),
+                            entry_price=float(position["ep"]),
                             liquidation_price=float("nan"),  # TODO
                         )
                     )

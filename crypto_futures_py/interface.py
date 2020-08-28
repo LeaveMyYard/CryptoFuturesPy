@@ -260,6 +260,16 @@ class AbstractExchangeHandler(metaclass=abc.ABCMeta):
             ).digest()
         ).decode("ascii")
 
+    @dataclass
+    class SymbolData:
+        min_volume: float
+        max_volume: float
+        step_size: float
+
+    @abc.abstractmethod
+    def get_symbols_data(self) -> typing.Dict[str, SymbolData]:
+        ...
+
     def _register_order_data(self, order_data: typing.Dict[str, typing.Any],) -> None:
         self._order_table_id[order_data["orderID"]] = order_data
         self._order_table_clid[order_data["client_orderID"]] = order_data
