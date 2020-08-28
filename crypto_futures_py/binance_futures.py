@@ -1,7 +1,7 @@
 """
     This module contains an implementation for Binance Futures (BinanceFuturesExchangeHandler)
 """
-
+from __future__ import annotations
 
 import pandas as pd
 import typing
@@ -10,6 +10,7 @@ import logging
 import pandas as pd
 
 from datetime import datetime
+from dataclasses import dataclass
 
 from . import futurespy as fp
 from . import AbstractExchangeHandler
@@ -28,6 +29,29 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         self._clOrderId_dict = {}
 
         self.logger = logging.Logger(__name__)
+
+    @dataclass
+    class SymbolData:
+        min_volume: float
+        max_volume: float
+        step_size: float
+
+    def get_symbols_data(self) -> typing.Dict[str, SymbolData]:
+        symbols_dict = {}
+        exchange_symbols_data = BinanceFuturesExchangeHandler.exchange_information[
+            "symbols"
+        ]
+
+        for symbol_data in exchange_symbols_data:
+            min_volume = float(symbol_data["filters"][1]["minQty"])
+            max_volume = float(symbol_data["filters"][1]["maxQty"])
+            step_size = float(symbol_data["filters"][1]["stepSize"])
+
+            symbols_dict[symbol_data["symbol"]] = self.SymbolData(
+                min_volume=min_volume, max_volume=max_volume, step_size=step_size
+            )
+        
+        return symbols_dict
 
     def start_kline_socket(
         self,
