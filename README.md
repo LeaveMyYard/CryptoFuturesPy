@@ -10,7 +10,7 @@
 
 One day, I was tried to be messing with different interfaces of Binance, Bitmex and etc so I desided to create an interface for them and to make some implementations.
 
-So, there exists only a Bitmex implementation now, but Binance Futures are coming.
+So, there exists a Bitmex and a Binance Futures implementation now, but more are coming soon.
 
 All code is written on Python 3.7 with typing specifications. 
 
@@ -50,7 +50,7 @@ All the methods are described in AbstractExchangeHandler and later would be in a
 
 ## TODO
 
-- [ ] Add Binance implementation
+- [x] Add Binance implementation
 - [ ] Add a documentation
 - [ ] Make websocket threads stoppable
 
