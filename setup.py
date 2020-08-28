@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="crypto_futures_py",
-    version="0.2.2",
+    version="0.3.0",
     packages=find_packages(),
     install_requires=["bitmex", "websocket_client"],
     # metadata to display on PyPI

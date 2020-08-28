@@ -50,7 +50,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
             symbols_dict[symbol_data["symbol"]] = self.SymbolData(
                 min_volume=min_volume, max_volume=max_volume, step_size=step_size
             )
-        
+
         return symbols_dict
 
     def start_kline_socket(
@@ -98,6 +98,9 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         self, on_update: typing.Callable[[AbstractExchangeHandler.UserUpdate], None]
     ) -> None:
         super().start_user_update_socket(on_update)
+
+        for data in self._client.balance():
+            on_update(self.BalanceUpdate(balance=data["balance"], symbol=data["asset"]))
 
         def _on_update_recieved(message: typing.Dict[str, typing.Any]) -> None:
             if message["e"] == "ACCOUNT_UPDATE":
