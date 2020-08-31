@@ -280,9 +280,9 @@ class MarketData:
                     "Volume": float(candle[5]),
                 }
                 tmp_list.append(dd)
-            if len(tmp) not in lim:
-                print("--- Not enough data ---")
-                return
+            # if len(tmp) not in lim:
+            #     print("--- Not enough data ---")
+            #     return
             tm = tmp[0][0] - 1
 
         df = pd.DataFrame(reversed(tmp_list))
