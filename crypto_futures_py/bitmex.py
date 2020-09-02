@@ -178,11 +178,11 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
 
         def __process_order_update(msg):
             for data in msg["data"]:
-                if data["orderID"] not in self._order_table:
-                    self._order_table[data["orderID"]] = {}
+                if data["orderID"] not in self._order_table_id:
+                    self._order_table_id[data["orderID"]] = {}
 
                 for key, value in data.items():
-                    self._order_table[data["orderID"]][key] = value
+                    self._order_table_id[data["orderID"]][key] = value
 
             if "action" in msg and (
                 msg["action"] == "insert" or msg["action"] == "update"
@@ -190,7 +190,7 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
                 for data in msg["data"]:
                     if "ordStatus" not in data:
                         continue
-                    order_data = self._order_table[data["orderID"]]
+                    order_data = self._order_table_id[data["orderID"]]
                     fee_payed = 0
 
                     if data["ordStatus"] == "Filled":
