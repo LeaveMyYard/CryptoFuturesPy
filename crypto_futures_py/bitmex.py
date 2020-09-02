@@ -13,6 +13,7 @@ import logging
 import pandas as pd
 import typing
 import urllib
+import traceback
 import urllib.parse
 from datetime import datetime, timedelta
 import collections
@@ -56,6 +57,7 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
             test=False, api_key=self._public_key, api_secret=self._private_key
         )
         self.logger = logging.Logger(__name__)
+        self._order_table: typing.Dict[str, typing.Any] = {}
 
     @staticmethod
     def get_pairs_list() -> typing.List[str]:
@@ -178,11 +180,11 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
 
         def __process_order_update(msg):
             for data in msg["data"]:
-                if data["orderID"] not in self._order_table_id:
-                    self._order_table_id[data["orderID"]] = {}
+                if data["orderID"] not in self._order_table:
+                    self._order_table[data["orderID"]] = {}
 
                 for key, value in data.items():
-                    self._order_table_id[data["orderID"]][key] = value
+                    self._order_table[data["orderID"]][key] = value
 
             if "action" in msg and (
                 msg["action"] == "insert" or msg["action"] == "update"
@@ -190,7 +192,7 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
                 for data in msg["data"]:
                     if "ordStatus" not in data:
                         continue
-                    order_data = self._order_table_id[data["orderID"]]
+                    order_data = self._order_table[data["orderID"]]
                     fee_payed = 0
 
                     if data["ordStatus"] == "Filled":
@@ -234,7 +236,7 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
                     if dic["status"] == "PARTIALLYFILLED":
                         dic["status"] = "PARTIALLY_FILLED"
 
-                    self._register_order_data(order_data)
+                    self._register_order_data(dic)
                     on_update(AbstractExchangeHandler.OrderUpdate(**dic))
 
         _position_table: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
@@ -312,6 +314,7 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
                 result = ws.recv()
                 __process_msg(result)
             except Exception as e:
+                traceback.print_tb(e.__traceback__)
                 self.logger.error(
                     f"An error happened in user update socket {e.__class__.__name__} {e}: {result}, restarting..."
                 )
