@@ -390,6 +390,9 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
 
         return df
 
+    def get_symbols_data(self) -> typing.Dict[str, AbstractExchangeHandler.SymbolData]:
+        raise NotImplementedError
+
     def _round_price(
         self, symbol: str, price: typing.Optional[float]
     ) -> typing.Optional[float]:
