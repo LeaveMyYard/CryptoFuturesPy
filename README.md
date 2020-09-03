@@ -32,25 +32,12 @@ The documentation is [available here](http://day8.github.io/re-frame/). -->
 
 ## Usage
 
-Create an object of your wanted exchange and provide your keys for this exchange there.
-
-```python
-from crypto_futures_py import BitmexExchangeHandler
-
-handler = BitmexExchangeHandler("publickey", "privatekey")
-```
-
-After that you can call it's methods to load data or to place orders:
-
-```python
-handler.start_kline_socket(lambda x: print(x), candle_type="1m", pair_name="XBTUSD")
-```
-
-All the methods are described in AbstractExchangeHandler and later would be in a separate documentation.
+Read a Usage Guide [here](docs/usage.md)
 
 ## TODO
 
 - [x] Add Binance implementation
+- [x] Add a Usage Guide
 - [ ] Add a documentation
 - [ ] Make websocket threads stoppable
 
