@@ -67,7 +67,7 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
             .result()[0]["symbols"]
         )
 
-    def start_kline_socket(
+    async def start_kline_socket(
         self,
         on_update: typing.Callable[[AbstractExchangeHandler.KlineCallback], None],
         candle_type: str,
@@ -108,7 +108,7 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
         )
         ws.run_forever()
 
-    def start_price_socket(
+    async def start_price_socket(
         self,
         on_update: typing.Callable[[AbstractExchangeHandler.PriceCallback], None],
         pair_name: str,
@@ -136,7 +136,7 @@ class BitmexExchangeHandler(AbstractExchangeHandler):
         )
         ws.run_forever()
 
-    def start_user_update_socket(
+    async def start_user_update_socket(
         self, on_update: typing.Callable[[AbstractExchangeHandler.UserUpdate], None]
     ) -> None:
         self.logger.info("Starting user update socket")
