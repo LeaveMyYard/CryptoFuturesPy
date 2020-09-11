@@ -50,7 +50,7 @@ class AbstractExchangeHandler(metaclass=abc.ABCMeta):
         message: typing.Any
 
     @abc.abstractmethod
-    async def start_kline_socket(
+    def start_kline_socket(
         self,
         on_update: typing.Callable[[AbstractExchangeHandler.KlineCallback], None],
         candle_type: str,
@@ -63,7 +63,7 @@ class AbstractExchangeHandler(metaclass=abc.ABCMeta):
         price: float
 
     @abc.abstractmethod
-    async def start_price_socket(
+    def start_price_socket(
         self,
         on_update: typing.Callable[[AbstractExchangeHandler.PriceCallback], None],
         pair_name: str,
@@ -101,10 +101,48 @@ class AbstractExchangeHandler(metaclass=abc.ABCMeta):
     UserUpdate = typing.Union[OrderUpdate, PositionUpdate, BalanceUpdate]
 
     @abc.abstractmethod
-    async def start_user_update_socket(
+    def start_user_update_socket(
         self, on_update: typing.Callable[[AbstractExchangeHandler.UserUpdate], None]
     ) -> None:
         self._user_update_callbacks.append(on_update)
+
+    def start_kline_socket_threaded(
+        self,
+        on_update: typing.Callable[[AbstractExchangeHandler.KlineCallback], None],
+        candle_type: str,
+        pair_name: str,
+    ) -> threading.Thread:
+        thread = threading.Thread(
+            target=self.start_kline_socket, args=[on_update, candle_type, pair_name]
+        )
+        thread.setDaemon(True)
+        thread.start()
+        return thread
+
+    def start_price_socket_threaded(
+        self,
+        on_update: typing.Callable[[AbstractExchangeHandler.PriceCallback], None],
+        pair_name: str,
+    ) -> threading.Thread:
+        thread = threading.Thread(
+            target=self.start_price_socket, args=[on_update, pair_name]
+        )
+        thread.setDaemon(True)
+        thread.start()
+        return thread
+
+    def start_user_update_socket_threaded(
+        self,
+        on_update: typing.Callable[
+            [typing.Union[AbstractExchangeHandler.OrderUpdate]], None
+        ],
+    ) -> threading.Thread:
+        thread = threading.Thread(
+            target=self.start_user_update_socket, args=[on_update]
+        )
+        thread.setDaemon(True)
+        thread.start()
+        return thread
 
     @abc.abstractmethod
     async def load_historical_data(

@@ -47,7 +47,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
 
         return symbols_dict
 
-    async def start_kline_socket(
+    def start_kline_socket(
         self,
         on_update: typing.Callable[[AbstractExchangeHandler.KlineCallback], None],
         candle_type: str,
@@ -75,7 +75,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         )
         ws.candle_socket()
 
-    async def start_price_socket(
+    def start_price_socket(
         self,
         on_update: typing.Callable[[AbstractExchangeHandler.PriceCallback], None],
         pair_name: str,
@@ -88,7 +88,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         )
         ws.mark_price_socket()
 
-    async def start_user_update_socket(
+    def start_user_update_socket(
         self, on_update: typing.Callable[[AbstractExchangeHandler.UserUpdate], None]
     ) -> None:
         super().start_user_update_socket(on_update)
