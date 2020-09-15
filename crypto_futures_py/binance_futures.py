@@ -128,7 +128,7 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
                     value=float(position["positionAmt"])
                     * float(position["entryPrice"]),
                     entry_price=float(position["entryPrice"]),
-                    liquidation_price=float(position["liquidationPrice"]),  # TODO
+                    liquidation_price=float(position["liquidationPrice"]),
                 )
             )
 
