@@ -71,6 +71,9 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         ws = fp.WebsocketMarket(
             symbol=pair_name,
             on_message=lambda _, message: _on_update(message),
+            on_close=lambda _: self.start_kline_socket(
+                on_update, candle_type, pair_name
+            ),
             interval=candle_type,
         )
         ws.candle_socket()
@@ -84,7 +87,9 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
             on_update(self.PriceCallback(float(message["p"])))
 
         ws = fp.WebsocketMarket(
-            symbol=pair_name, on_message=lambda _, message: _on_update(message),
+            symbol=pair_name,
+            on_message=lambda _, message: _on_update(message),
+            on_close=lambda _: self.start_price_socket(on_update, pair_name),
         )
         ws.mark_price_socket()
 
