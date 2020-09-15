@@ -256,7 +256,8 @@ class BinanceFuturesExchangeHandler(AbstractExchangeHandler):
         Args:
             symbol (str): Pair name, for which to place an order
             side (str): "Buy" or "Sell"
-            price (typing.Optional[float]): If the price is set, the price for limit order. Else - market order.
+            price (typing.Optional[float]): If the price is set, 
+            the price for limit order. Else - market order.
             volume (float): The volume of the order
             client_ordID (typing.Optional[str], optional): Client order_id. 
                 Could be generated using generate_client_order_id(). Defaults to None.
